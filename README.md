@@ -89,6 +89,8 @@ curl POST /math/add-two-numbers
 
 4 EC2 `t3.micro` instances (free-tier eligible in eu-north-1), all in the same VPC:
 
+![alt text](<Screenshot 2026-05-21 at 1.46.15 AM.png>)
+
 | VM | Subnet | Public IP | Role |
 |----|--------|-----------|------|
 | gateway | public (10.0.1.0/24) | 16.192.37.39 (Elastic IP) | nginx reverse proxy |
@@ -214,7 +216,7 @@ ss -tlnp | grep -E '3111|49134'
 
 ---
 
-## Troubleshooting (lessons from actual deployment)
+## Troubleshooting (lessons from my actual deployment :))
 
 These are real issues encountered during deployment of this exact stack.
 
@@ -279,3 +281,5 @@ The `-J` jump flag alone doesn't forward your local key to the private VM. Use `
 6. **Observability.** Add Prometheus metrics (iii exposes them on port 9464), scrape with Amazon Managed Prometheus, visualise in Grafana. Track p50/p95/p99 inference latency, queue depth, GPU utilisation, and KV-cache hit rate in one dashboard.
 
 7. **Multi-AZ.** Spread inference instances across availability zones. The current single-AZ setup means one AZ failure takes everything down.
+
+
