@@ -3,25 +3,53 @@ set -euo pipefail
 exec > /var/log/iii-setup.log 2>&1
 
 echo "=== engine setup start $(date) ==="
-
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y curl git
+apt-get install -y curl git jq
 
-# Install iii
 curl -fsSL https://install.iii.dev/iii/main/install.sh | sh
-export PATH="/root/.local/bin:$PATH"
+export PATH="/home/ubuntu/.local/bin:$PATH"
 
-# Scaffold quickstart project
-mkdir -p /opt/iii && cd /opt/iii
-iii project init quickstart --template quickstart
-cd quickstart
+cp /home/ubuntu/.local/bin/iii        /usr/local/bin/iii
+cp /home/ubuntu/.local/bin/iii-worker /usr/local/bin/iii-worker
 
-# Add state and http workers (these run inside the engine process)
-iii worker add iii-state --no-start || true
-iii worker add iii-http  --no-start || true
+mkdir -p /opt/iii
+chown ubuntu:ubuntu /opt/iii
+cd /opt/iii
+sudo -u ubuntu iii project init quickstart --template quickstart
+cd /opt/iii/quickstart
 
-# Create systemd service so engine survives reboots
+cat > /opt/iii/quickstart/config.yaml << 'YAML'
+workers:
+  - name: iii-observability
+    config:
+      enabled: true
+      service_name: iii
+      exporter: memory
+      memory_max_spans: 10000
+      metrics_enabled: true
+      metrics_exporter: memory
+      logs_enabled: true
+      logs_exporter: memory
+      logs_console_output: true
+      sampling_ratio: 1.0
+  - name: iii-queue
+    config:
+      adapter:
+        name: builtin
+  - name: iii-state
+    config:
+      adapter:
+        name: kv
+        config:
+          store_method: file_based
+          file_path: ./data/state_store.db
+  - name: iii-http
+    config:
+      port: 3111
+      host: 0.0.0.0
+YAML
+
 cat > /etc/systemd/system/iii-engine.service << 'SERVICE'
 [Unit]
 Description=iii engine
@@ -29,12 +57,12 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=ubuntu
 WorkingDirectory=/opt/iii/quickstart
-ExecStart=/root/.local/bin/iii --config config.yaml
+ExecStart=/usr/local/bin/iii --config config.yaml
 Restart=on-failure
 RestartSec=5
-Environment=PATH=/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 
 [Install]
 WantedBy=multi-user.target
@@ -42,6 +70,5 @@ SERVICE
 
 systemctl daemon-reload
 systemctl enable iii-engine
-systemctl start  iii-engine
-
+systemctl start iii-engine
 echo "=== engine setup done $(date) ==="

@@ -3,78 +3,70 @@ set -euo pipefail
 exec > /var/log/iii-setup.log 2>&1
 
 ENGINE_IP="${engine_private_ip}"
-echo "=== caller-worker setup start $(date), engine=$ENGINE_IP ==="
-
+echo "=== caller-worker setup start $(date) ==="
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y curl git
 
-# Node.js 20
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y nodejs
 
-curl -fsSL https://install.iii.dev/iii/main/install.sh | sh
-export PATH="/root/.local/bin:$PATH"
+mkdir -p /home/ubuntu/caller-worker/src
 
-mkdir -p /opt/iii/caller-worker/src
-
-cat > /opt/iii/caller-worker/package.json << 'JSON'
+cat > /home/ubuntu/caller-worker/package.json << 'JSON'
 {
   "name": "caller-worker",
-  "version": "1.0.0",
-  "dependencies": {
-    "@iii-dev/sdk": "latest",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.4.5"
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": { "iii-sdk": "0.11.0" },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
   }
 }
 JSON
 
-cat > /opt/iii/caller-worker/src/worker.ts << 'TS'
-import { Worker } from "@iii-dev/sdk";
+cat > /home/ubuntu/caller-worker/src/worker.ts << 'TS'
+import { registerWorker, Logger } from 'iii-sdk';
 
-const engineUrl = process.env.III_ENGINE_URL!;
-const worker = new Worker({ engineUrl });
+const iii = registerWorker(process.env.III_URL ?? 'ws://localhost:49134');
+const logger = new Logger();
 
-worker.registerFunction(
-  "math::add_two_numbers",
+iii.registerFunction(
+  'math::add_two_numbers',
   async (payload: { a: number; b: number }) => {
-    return worker.trigger({ function_id: "math::add", payload });
-  }
+    logger.info('math::add_two_numbers called in TypeScript', payload);
+    const result = await iii.trigger({ function_id: 'math::add', payload });
+    return result;
+  },
 );
 
-worker.registerFunction(
-  "http::add_two_numbers",
+iii.registerFunction(
+  'http::add_two_numbers',
   async (payload: { body: { a: number; b: number } }) => {
-    const result = await worker.trigger({
-      function_id: "math::add_two_numbers",
+    const result = await iii.trigger({
+      function_id: 'math::add_two_numbers',
       payload: payload.body,
     });
     return {
       status_code: 200,
-      body: result,
-      headers: { "Content-Type": "application/json" },
+      body: { c: result.c, running_total: result.running_total },
+      headers: { 'Content-Type': 'application/json' },
     };
-  }
+  },
 );
 
-worker.registerTrigger({
-  type: "http",
-  function_id: "http::add_two_numbers",
-  config: { api_path: "/math/add-two-numbers", http_method: "POST" },
+iii.registerTrigger({
+  type: 'http',
+  function_id: 'http::add_two_numbers',
+  config: { api_path: '/math/add-two-numbers', http_method: 'POST' },
 });
 
-worker.start();
-console.log("caller-worker connected to", engineUrl);
+console.log('Caller worker started');
 TS
 
-cd /opt/iii/caller-worker && npm install --quiet
-
-for i in $(seq 1 36); do
-  curl -sf --max-time 3 "http://$ENGINE_IP:3111/health" && break || true
-  echo "waiting for engine... ($i/36)"
-  sleep 5
-done
+cd /home/ubuntu/caller-worker && npm install
+chown -R ubuntu:ubuntu /home/ubuntu/caller-worker
 
 cat > /etc/systemd/system/iii-caller-worker.service << SERVICE
 [Unit]
@@ -83,12 +75,13 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/opt/iii/caller-worker
-ExecStart=/usr/bin/npx ts-node src/worker.ts
+User=ubuntu
+WorkingDirectory=/home/ubuntu/caller-worker
+ExecStart=/usr/bin/node --import tsx/esm src/worker.ts
 Restart=on-failure
 RestartSec=5
-Environment=III_ENGINE_URL=ws://$ENGINE_IP:49134
+Environment=III_URL=ws://$ENGINE_IP:49134
+Environment=NODE_NO_WARNINGS=1
 
 [Install]
 WantedBy=multi-user.target
@@ -96,6 +89,5 @@ SERVICE
 
 systemctl daemon-reload
 systemctl enable iii-caller-worker
-systemctl start  iii-caller-worker
-
+systemctl start iii-caller-worker
 echo "=== caller-worker setup done $(date) ==="
