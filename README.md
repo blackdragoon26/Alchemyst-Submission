@@ -81,17 +81,7 @@ curl POST /math/add-two-numbers
 
 **Live example:**
 
-```bash
-curl -X POST http://16.192.37.39/math/add-two-numbers \
-  -H 'Content-Type: application/json' \
-  -d '{"a": 10, "b": 20}'
-# {"c":30,"running_total":30}
-
-curl -X POST http://16.192.37.39/math/add-two-numbers \
-  -H 'Content-Type: application/json' \
-  -d '{"a": 5, "b": 7}'
-# {"c":12,"running_total":42}
-```
+<img width="1470" height="956" alt="Screenshot 2026-05-21 at 1 16 26 AM" src="https://github.com/user-attachments/assets/bdfcc553-1e58-4696-bf57-0e350a7085e4" />
 
 ---
 
