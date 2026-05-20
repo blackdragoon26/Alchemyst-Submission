@@ -3,8 +3,7 @@ set -euo pipefail
 exec > /var/log/iii-setup.log 2>&1
 
 ENGINE_IP="${engine_private_ip}"
-echo "=== gateway setup start $(date), engine=$ENGINE_IP ==="
-
+echo "=== gateway setup start $(date) ==="
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y nginx curl
@@ -20,7 +19,7 @@ server {
     }
 
     location / {
-        proxy_pass         http://$ENGINE_IP:3111\;
+        proxy_pass         http://$\{ENGINE_IP\}:3111\;
         proxy_http_version 1.1;
         proxy_set_header   Host              \$host;
         proxy_set_header   X-Real-IP         \$remote_addr;
@@ -36,5 +35,4 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl enable nginx
 systemctl restart nginx
-
 echo "=== gateway setup done $(date) ==="
